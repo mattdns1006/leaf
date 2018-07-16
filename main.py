@@ -5,14 +5,15 @@ import numpy as np
 import numpy.random as rng
 import os,pdb
 import load_data
+os.environ["CUDA_VISIBLE_DEVICES"]="1" 
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", 0.001, "Initial learning rate.")
-flags.DEFINE_integer("batch_size", 20, "Batch size.")
+flags.DEFINE_integer("batch_size", 10, "Batch size.")
 flags.DEFINE_integer("n_epochs", 30, "Number of training epochs.")
-flags.DEFINE_integer("in_h", 54, "Image rows = height.")
-flags.DEFINE_integer("in_w", 85, "Image cols = width.")
+flags.DEFINE_integer("in_h", 72, "Image rows = height.")
+flags.DEFINE_integer("in_w", 113, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
 flags.DEFINE_boolean("train", True, "Training model.")
 flags.DEFINE_string("model_path", "model.ckpt", "Save dir.")
@@ -29,37 +30,47 @@ class Model():
         self.n_epochs = n_epochs
 
     def graph(self,train=True):
+        bn = tf.layers.batch_normalization
         with tf.name_scope('input'):
             self.loader = load_data.Data_loader(in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs)
             data = self.loader.get_data(train=train)
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
-        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=64, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=8, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
 
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
 
         conv2 = self.conv2 = tf.layers.conv2d( inputs=pool1, filters=32, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-        conv3  = tf.layers.conv2d( inputs=pool2, filters=64, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
 
-        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
+        conv3 = self.conv2 = tf.layers.conv2d( inputs=pool2, filters=32, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
 
-        pool_flat = tf.reshape(pool3, [-1, 5*9*64])
-        dense = tf.layers.dense(inputs=pool_flat, units=128, activation=tf.nn.relu)
+        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+
+        shape = conv3.get_shape().as_list()
+        print("Shape at lowest point = {0}".format(shape))
+
+        flat = tf.reshape(conv3, [-1, shape[1]*shape[2]*shape[3]])
+        #flat = tf.layers.dropout(flat, rate=0.05, training=train)
+        dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
+
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
 
         self.predictions = {
         "classes": tf.argmax(input=self.logits, axis=1),
         "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor")
         }
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate)
         self.train_op = self.optimizer.minimize(
             loss=self.loss,
             global_step=tf.train.get_global_step())
         self.saver = tf.train.Saver()
+        total_params = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
+        print("Number of trainable parameters = {0}.".format(total_params))
+
 
     def train(self):
         def session(train):
@@ -67,7 +78,7 @@ class Model():
             with tf.Session() as sess:
                 self.graph(train=train)
                 coord = tf.train.Coordinator()
-                if FLAGS.load == True: 
+                if FLAGS.load == True or train==False: 
                     self.saver.restore(sess,self.model_path)
                 else:
                     tf.global_variables_initializer().run()
@@ -78,7 +89,7 @@ class Model():
                     losses = []
                     while True:
                         if train == True:
-                            _,loss,path = sess.run([self.train_op,self.loss,self.path])
+                            _,loss,path,x = sess.run([self.train_op,self.loss,self.path,self.X])
                         else:
                             loss,path = sess.run([self.loss,self.path])
                         count += len(path)
@@ -102,7 +113,4 @@ if __name__ == "__main__":
             n_epochs=FLAGS.n_epochs,
             learning_rate=FLAGS.lr)
     model.train()
-
-    pdb.set_trace()
-    print("fin")
 

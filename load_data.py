@@ -4,6 +4,7 @@ import glob,os,pdb
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 from sklearn.cross_validation import StratifiedShuffleSplit as SSS
+os.environ["CUDA_VISIBLE_DEVICES"]="1" 
 
 class Data_loader():
     def __init__(self,in_size,batch_size,n_epochs,clean_df=False,shuffle=True):
