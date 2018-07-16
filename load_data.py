@@ -47,14 +47,14 @@ class Data_loader():
                     tf.constant([],dtype = tf.int32,shape=[1])]
         path, species, species_no = tf.decode_csv(v,record_defaults = defaults)
         img = self.getImg(path)
-
         min_after_dequeue = 10
         capacity = min_after_dequeue + 3*self.batch_size
-        img_batch, label_batch = tf.train.shuffle_batch([img, species_no], batch_size=self.batch_size,
-                capacity=capacity, min_after_dequeue=min_after_dequeue,
+        path_batch, img_batch, label_batch = tf.train.shuffle_batch([path, img, species_no], 
+                batch_size=self.batch_size,
+                capacity=capacity, 
+                min_after_dequeue=min_after_dequeue,
                 allow_smaller_final_batch=True)
-        
-        return [img_batch,label_batch] 
+        return [path_batch,img_batch,label_batch] 
 
     def getImg(self,path):
         image_bytes = tf.read_file(path)
