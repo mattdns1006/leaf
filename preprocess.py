@@ -3,21 +3,29 @@ import numpy as np
 from scipy.ndimage import imread
 from scipy.misc import imresize, imsave
 import matplotlib.pyplot as plt
+import argparse
+from tqdm import tqdm
 
-def preprocess(scale=10,plot=False):
-    print("Get maximum image dimensions in dataset.")
+
+def preprocess(scale=20):
+    to_delete = glob.glob("images/*_preprocessed.jpg")
+    print("Removing old preprocessed images")
+    for f in tqdm(to_delete):
+        os.remove(f)
     img_paths = glob.glob("images/*.jpg")
+
+    print("Get maximum image dimensions in dataset.")
     img_sizes = []
-    for img_path in img_paths:
+    for img_path in tqdm(img_paths):
         shape = imread(img_path).shape
         img_sizes.append(shape)
     img_sizes_arr = np.array(img_sizes)
     max_hw = max_h, max_w = img_sizes_arr.max(0)
     out_size = (max_hw/scale).astype(np.int16)
-    print("Max height width = {0}. Saving files to size {1}.".format(max_hw,out_size))
+    print("Max height width = {0}. Using scale factor of {1}. Saving files to size {2}.".format(max_hw,scale,out_size))
 
     img_sizes = []
-    for img_path in img_paths[:]:
+    for img_path in tqdm(img_paths):
         img = imread(img_path)
         h,w = img.shape
         title1 = "Image path = {0} has size {1}.".format(img_path,img.shape)
@@ -27,13 +35,10 @@ def preprocess(scale=10,plot=False):
         resized = imresize(img_padded,out_size)
         out_path = img_path.replace(".jpg","_preprocessed.jpg")
         imsave(out_path,resized)
-        if plot == True:
-            f, (ax1, ax2) = plt.subplots(1, 2, sharey=True,figsize=(15,5))
-            title2 = "After padding size = {0}.".format(img_padded.shape)
-            ax1.imshow(img,cmap=cm.gray); ax2.imshow(img_padded,cmap=cm.gray)
-            ax1.set_title(title1)
-            ax2.set_title(title2)
     print("Finished!")
 
 if __name__ == "__main__":
-    preprocess()
+    parser = argparse.ArgumentParser(description='Scale factor for new images.')
+    parser.add_argument('sf', default=20,type=int, help='integer scaling factor')
+    _args = vars(parser.parse_args())
+    preprocess(scale=_args['sf'])
