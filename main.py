@@ -12,8 +12,8 @@ FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", 0.001, "Initial learning rate.")
 flags.DEFINE_integer("batch_size", 10, "Batch size.")
 flags.DEFINE_integer("n_epochs", 30, "Number of training epochs.")
-flags.DEFINE_integer("in_h", 72, "Image rows = height.")
-flags.DEFINE_integer("in_w", 113, "Image cols = width.")
+flags.DEFINE_integer("in_h", 181, "Image rows = height.")
+flags.DEFINE_integer("in_w", 284, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
 flags.DEFINE_boolean("train", True, "Training model.")
 flags.DEFINE_string("model_path", "model.ckpt", "Save dir.")
@@ -24,7 +24,7 @@ class Model():
         self.in_size = in_size
         self.in_h = in_size[0]
         self.in_w = in_size[1]
-        self.filter_size = 5
+        self.filter_size = 3
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.n_epochs = n_epochs
@@ -37,22 +37,22 @@ class Model():
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
-        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=8, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=16, 
+        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
 
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+        conv2 = tf.layers.conv2d( inputs=pool1, filters=32,
+        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-        conv2 = self.conv2 = tf.layers.conv2d( inputs=pool1, filters=32, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv3 = tf.layers.conv2d( inputs=pool2, filters=32, 
+        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
 
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
-
-        conv3 = self.conv2 = tf.layers.conv2d( inputs=pool2, filters=32, kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-
-        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
-
-        shape = conv3.get_shape().as_list()
+        shape = pool3.get_shape().as_list()
         print("Shape at lowest point = {0}".format(shape))
+        flat = tf.reshape(pool3, [-1, shape[1]*shape[2]*shape[3]])
 
-        flat = tf.reshape(conv3, [-1, shape[1]*shape[2]*shape[3]])
         #flat = tf.layers.dropout(flat, rate=0.05, training=train)
         dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
@@ -63,10 +63,13 @@ class Model():
         "classes": tf.argmax(input=self.logits, axis=1),
         "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor")
         }
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate)
+        #self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.train_op = self.optimizer.minimize(
             loss=self.loss,
-            global_step=tf.train.get_global_step())
+            global_step=self.global_step)
         self.saver = tf.train.Saver()
         total_params = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
         print("Number of trainable parameters = {0}.".format(total_params))
@@ -89,14 +92,19 @@ class Model():
                     losses = []
                     while True:
                         if train == True:
-                            _,loss,path,x = sess.run([self.train_op,self.loss,self.path,self.X])
+                            _,loss,path,gs = sess.run([self.train_op,
+                            self.loss,self.path,self.global_step])
                         else:
                             loss,path = sess.run([self.loss,self.path])
                         count += len(path)
                         losses.append(loss)
 
                         if count % 100 == 0:
-                            print("Seen {0} examples. Losses = {1:.4f}".format(count,np.array(losses).mean()))
+                            running_mean = np.array(losses).mean()
+                            print("Seen {0} examples. Losses = {1:.4f}".format(
+                            count,
+                            running_mean
+                            ))
                             losses = []
                             self.saver.save(sess,self.model_path)
                 except tf.errors.OutOfRangeError:
