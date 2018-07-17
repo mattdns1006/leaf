@@ -40,4 +40,4 @@ if __name__ == "__main__":
     #parser.add_argument('sf', default=15,type=int, help='integer scaling factor')
     #_args = vars(parser.parse_args())
     #preprocess(scale=_args['sf'])
-    preprocess(scale=6)
+    preprocess(scale=10)
