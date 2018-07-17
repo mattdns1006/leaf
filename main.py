@@ -30,39 +30,40 @@ class Model():
         self.n_epochs = n_epochs
 
     def graph(self,train=True):
+        in_training = train 
         bn = tf.layers.batch_normalization
         with tf.name_scope('input'):
             self.loader = load_data.Data_loader(in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs)
-            data = self.loader.get_data(train=train)
+            data = self.loader.get_data(train=in_training)
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
         conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=32, 
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv1 = bn(conv1,training=True)
+        conv1 = bn(conv1,training=in_training)
         pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
 
         conv2 = tf.layers.conv2d( inputs=pool1, filters=32,
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv2 = bn(conv2,training=True)
+        conv2 = bn(conv2,training=in_training)
         pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-        conv3 = tf.layers.conv2d( inputs=pool2, filters=32, 
+        conv3 = tf.layers.conv2d( inputs=pool2, filters=48, 
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv3 = bn(conv3,training=True)
+        conv3 = bn(conv3,training=in_training)
         pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
 
-        conv4 = tf.layers.conv2d( inputs=pool3, filters=32, 
+        conv4 = tf.layers.conv2d( inputs=pool3, filters=48, 
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv4 = bn(conv4,training=True)
+        conv4 = bn(conv4,training=in_training)
         pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2)
 
         shape = pool4.get_shape().as_list()
         print("Shape at lowest point = {0}".format(shape))
         flat = tf.reshape(pool4, [-1, shape[1]*shape[2]*shape[3]])
 
-        dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
-        dense = bn(dense,training=True)
+        dense = tf.layers.dense(inputs=flat, units=512, activation=tf.nn.relu)
+        dense = bn(dense,training=in_training)
         #flat = tf.layers.dropout(flat, rate=0.25, training=train)
         dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
