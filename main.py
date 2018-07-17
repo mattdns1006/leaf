@@ -43,24 +43,28 @@ class Model():
         conv1 = bn(conv1,training=in_training)
         pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
 
-        conv2 = tf.layers.conv2d( inputs=pool1, filters=32,
+        conv2 = tf.layers.conv2d( inputs=pool1, filters=48,
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
         conv2 = bn(conv2,training=in_training)
         pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-        conv3 = tf.layers.conv2d( inputs=pool2, filters=48, 
+        conv3 = tf.layers.conv2d( inputs=pool2, filters=64, 
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
         conv3 = bn(conv3,training=in_training)
         pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
 
-        conv4 = tf.layers.conv2d( inputs=pool3, filters=48, 
+        conv4 = tf.layers.conv2d( inputs=pool3, filters=80, 
             kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
         conv4 = bn(conv4,training=in_training)
         pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2)
 
-        shape = pool4.get_shape().as_list()
+        conv5 = tf.layers.conv2d( inputs=pool4, filters=96, 
+            kernel_size=[self.filter_size, self.filter_size],strides=[2,2], padding="same", activation=tf.nn.relu)
+        conv5 = bn(conv5,training=in_training)
+
+        shape = conv5.get_shape().as_list()
         print("Shape at lowest point = {0}".format(shape))
-        flat = tf.reshape(pool4, [-1, shape[1]*shape[2]*shape[3]])
+        flat = tf.reshape(conv5, [-1, shape[1]*shape[2]*shape[3]])
 
         dense = tf.layers.dense(inputs=flat, units=512, activation=tf.nn.relu)
         dense = bn(dense,training=in_training)
