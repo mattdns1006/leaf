@@ -73,10 +73,19 @@ class Model():
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
+        predictions = tf.argmax(input=self.logits, axis=1)
 
-        self.predictions = {
-        "classes": tf.argmax(input=self.logits, axis=1),
-        "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor")
+        with tf.variable_scope("cm"):
+            n_classes = self.loader.le.classes_.size
+            cm_diff = tf.confusion_matrix(labels=self.Y,predictions=predictions,num_classes=n_classes)
+            cm_init = tf.get_variable("confusion_matrix",[n_classes,n_classes],dtype=tf.int32,
+                initializer = tf.zeros_initializer())
+            self.cm = tf.assign_add(cm_init, cm_diff)
+
+        self.metrics = {
+        "predictions": predictions,
+        "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor"),
+        "cm": self.cm
         }
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -93,43 +102,51 @@ class Model():
         print("Number of trainable parameters = {0}.".format(total_params))
 
 
-    def train(self):
-        def session(train):
-            tf.reset_default_graph()
-            with tf.Session() as sess:
-                self.graph(train=train)
-                coord = tf.train.Coordinator()
-                if FLAGS.load == True or train==False: 
-                    self.saver.restore(sess,self.model_path)
-                else:
-                    tf.global_variables_initializer().run()
-                tf.local_variables_initializer().run()
-                threads = tf.train.start_queue_runners(sess=sess,coord=coord)
-                try:
-                    count = 0 
-                    losses = []
-                    while True:
-                        if train == True:
-                            _,loss,path,gs = sess.run([self.train_op,
-                            self.loss,self.path,self.global_step])
-                        else:
-                            loss,path = sess.run([self.loss,self.path])
-                        count += len(path)
-                        losses.append(loss)
+    def session(self,train):
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            self.graph(train=train)
+            coord = tf.train.Coordinator()
+            if FLAGS.load == True or train==False: 
+                self.saver.restore(sess,self.model_path)
+            else:
+                tf.global_variables_initializer().run()
+            tf.local_variables_initializer().run()
+            threads = tf.train.start_queue_runners(sess=sess,coord=coord)
+            try:
+                count = 0 
+                losses = []
+                while True:
+                    if train == True:
+                        _,loss,path,cm = sess.run([self.train_op,
+                        self.loss,self.path,
+                        self.metrics['cm']
+                        ])
+                    else:
+                        loss,path = sess.run([self.loss,self.path])
+                    count += len(path)
+                    losses.append(loss)
 
-                        if count % 100 == 0:
-                            running_mean = np.array(losses).mean()
-                            print("Seen {0} examples. Losses = {1:.4f}".format(
-                            count,
-                            running_mean
-                            ))
-                            losses = []
-                            self.saver.save(sess,self.model_path)
-                except tf.errors.OutOfRangeError:
-                    print("Finished!")
-            sess.close()
-        session(train=True)
-        session(train=False)
+                    if count % 500 == 0 and train == True:
+                        running_mean = np.array(losses).mean()
+                        print("Seen {0}/{1} examples. Losses = {2:.4f}".format(
+                        count,
+                        self.loader.train_size*self.n_epochs,
+                        running_mean
+                        ))
+                        losses = []
+                        self.saver.save(sess,self.model_path)
+            except tf.errors.OutOfRangeError:
+                print("Finished!")
+
+            if train == False:
+                val_loss = np.array(losses).mean()
+                print("Test loss = {0:.4f}.".format(val_loss))
+                pdb.set_trace()
+
+        sess.close()
+
+
 
 if __name__ == "__main__":
     in_size = [FLAGS.in_h,FLAGS.in_w]
@@ -138,5 +155,6 @@ if __name__ == "__main__":
             batch_size=FLAGS.batch_size,
             n_epochs=FLAGS.n_epochs,
             learning_rate=FLAGS.lr)
-    model.train()
+    model.session(train=True)
+    model.session(train=False)
 

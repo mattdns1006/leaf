@@ -34,6 +34,9 @@ class Data_loader():
 
             train_df.to_csv(self.train_df_clean_path,index=0,header=True)
             val_df.to_csv(self.val_df_clean_path.replace("train","val"),index=0,header=True)
+        num_lines = lambda path: pd.read_csv(path).shape[0] 
+        self.train_size = num_lines(self.train_df_clean_path)
+        self.val_size = num_lines(self.val_df_clean_path)
 
     def reader(self,csv_path):
         if csv_path == self.train_df_clean_path:
@@ -66,13 +69,10 @@ class Data_loader():
         return decoded_img
 
     def get_data(self,train):
-        train_q = self.reader(self.train_df_clean_path)
-        test_q = self.reader(self.val_df_clean_path)
         if train == True:
-            return train_q
+            return self.reader(self.train_df_clean_path)
         else:
-            print('here')
-            return test_q 
+            return self.reader(self.val_df_clean_path)
 
 if __name__ == "__main__":
     loader = Data_loader(in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
