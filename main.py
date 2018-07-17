@@ -61,9 +61,10 @@ class Model():
         print("Shape at lowest point = {0}".format(shape))
         flat = tf.reshape(pool4, [-1, shape[1]*shape[2]*shape[3]])
 
-        dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
-        flat = tf.layers.dropout(flat, rate=0.25, training=train)
-        dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
+        dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
+        dense = bn(dense,training=True)
+        #flat = tf.layers.dropout(flat, rate=0.25, training=train)
+        dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
@@ -76,9 +77,12 @@ class Model():
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate)
         #self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        self.train_op = self.optimizer.minimize(
-            loss=self.loss,
-            global_step=self.global_step)
+        extra_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(extra_ops): #for BN
+            self.train_op = self.optimizer.minimize(
+                loss=self.loss,
+                global_step=self.global_step)
+
         self.saver = tf.train.Saver()
         total_params = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
         print("Number of trainable parameters = {0}.".format(total_params))
