@@ -9,9 +9,9 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_float("lr", 0.001, "Initial learning rate.")
+flags.DEFINE_float("lr", 0.0001, "Initial learning rate.")
 flags.DEFINE_integer("batch_size", 10, "Batch size.")
-flags.DEFINE_integer("n_epochs", 30, "Number of training epochs.")
+flags.DEFINE_integer("n_epochs", 100, "Number of training epochs.")
 flags.DEFINE_integer("in_h", 108, "Image rows = height.")
 flags.DEFINE_integer("in_w", 170, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
@@ -37,30 +37,33 @@ class Model():
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
-        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=64, 
-        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=32, 
+            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv1 = bn(conv1,training=True)
         pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
 
-        conv2 = tf.layers.conv2d( inputs=pool1, filters=64,
-        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv2 = tf.layers.conv2d( inputs=pool1, filters=32,
+            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv2 = bn(conv2,training=True)
         pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-        conv3 = tf.layers.conv2d( inputs=pool2, filters=128, 
-        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv3 = tf.layers.conv2d( inputs=pool2, filters=32, 
+            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv3 = bn(conv3,training=True)
         pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
 
-        conv4 = tf.layers.conv2d( inputs=pool3, filters=128, 
-        kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv4 = tf.layers.conv2d( inputs=pool3, filters=32, 
+            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
+        conv4 = bn(conv4,training=True)
         pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2)
 
         shape = pool4.get_shape().as_list()
         print("Shape at lowest point = {0}".format(shape))
         flat = tf.reshape(pool4, [-1, shape[1]*shape[2]*shape[3]])
 
-
-        dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
+        dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
         flat = tf.layers.dropout(flat, rate=0.25, training=train)
-        dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
+        dense = tf.layers.dense(inputs=flat, units=128, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
