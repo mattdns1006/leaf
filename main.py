@@ -89,9 +89,9 @@ class Model():
         with tf.variable_scope("cm"):
             n_classes = self.loader.le.classes_.size
             cm_diff = tf.confusion_matrix(labels=self.Y,predictions=predictions,num_classes=n_classes)
-            cm_init = tf.get_variable("confusion_matrix",[n_classes,n_classes],dtype=tf.int32,
+            self.cm_init = tf.get_variable("confusion_matrix",[n_classes,n_classes],dtype=tf.int32,
                 initializer = tf.zeros_initializer())
-            self.cm = tf.assign_add(cm_init, cm_diff)
+            self.cm = tf.assign_add(self.cm_init, cm_diff)
 
         correct_prediction = tf.equal(tf.cast(self.Y,tf.int64),predictions)
         accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
@@ -158,6 +158,7 @@ class Model():
                         self.metrics['acc']
                         ])
                         test_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
+
                     count += len(path)
                     losses.append(loss)
 
@@ -177,7 +178,7 @@ class Model():
 
             if train == False:
                 val_loss = np.array(losses).mean()
-                print("Test loss = {0:.4f}. Acc = {1:.4f}.".format(val_loss,acc))
+                print("Test loss = {0:.4f}.".format(val_loss))
 
         sess.close()
 
@@ -191,6 +192,8 @@ if __name__ == "__main__":
             n_epochs=FLAGS.n_epochs,
             learning_rate=FLAGS.lr,
             aug_flip=FLAGS.aug_flip)
-    model.session(train=True)
-    model.session(train=False)
+    if FLAGS.train == True:
+        model.session(train=True)
+    else:
+        model.session(train=False)
 

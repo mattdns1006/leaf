@@ -41,6 +41,7 @@ class Data_loader():
 
     def reader(self,csv_path):
         n_epochs = self.n_epochs if self.in_training == True else 1
+        batch_size = self.batch_size if self.in_training else 1
         csv = tf.train.string_input_producer([csv_path],num_epochs=n_epochs)
         reader = tf.TextLineReader(skip_header_lines=1)
         k, v = reader.read(csv)
@@ -50,9 +51,9 @@ class Data_loader():
         path, species, species_no = tf.decode_csv(v,record_defaults = defaults)
         img = self.getImg(path)
         min_after_dequeue = 10
-        capacity = min_after_dequeue + 3*self.batch_size
+        capacity = min_after_dequeue + 3*batch_size
         path_batch, img_batch, label_batch = tf.train.shuffle_batch([path, img, species_no], 
-                batch_size=self.batch_size,
+                batch_size=batch_size,
                 capacity=capacity, 
                 min_after_dequeue=min_after_dequeue,
                 allow_smaller_final_batch=True)
@@ -70,7 +71,6 @@ class Data_loader():
             print("\n !!!Doing rotations !!!\n")
             angle = tf.random_normal(mean=0,stddev=0.19,shape=[1])
             decoded_img = tf.contrib.image.rotate(decoded_img,angles=angle)
-
         decoded_img = tf.squeeze(tf.image.resize_images(decoded_img,self.in_size))
         return decoded_img
 
@@ -82,7 +82,8 @@ class Data_loader():
 
 if __name__ == "__main__":
 
-    def session(data):
+    def session(loader):
+        data =loader.get_data()
         with tf.Session() as sess:
             tf.local_variables_initializer().run()
             coord = tf.train.Coordinator()
@@ -90,17 +91,17 @@ if __name__ == "__main__":
             count = 0 
             try:
                 while True:
-                    data_ = sess.run([data])[0]
+                    data_ = sess.run([data],feed_dict={loader.k:0})[0]
                     count += data_[0].shape[0]
             except tf.errors.OutOfRangeError:
                 print("\n Finished! Seen {0} examples.\n".format(count))
         sess.close()
 
-    train_loader = Data_loader(in_training=True,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
-    session(data=train_loader.get_data())
+    #train_loader = Data_loader(in_training=True,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True,aug_flip=True)
+    #session(data=train_loader.get_data())
 
-    test_loader = Data_loader(in_training= False,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
-    session(data=test_loader.get_data())
+    test_loader = Data_loader(in_training= False,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True,aug_flip=False)
+    session(test_loader)
     pdb.set_trace()
 
 
