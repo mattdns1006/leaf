@@ -17,6 +17,7 @@ flags.DEFINE_integer("in_w", 170, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
 flags.DEFINE_boolean("train", True, "Training model.")
 flags.DEFINE_string("model_path", "model.ckpt", "Save dir.")
+flags.DEFINE_string("summaries_dir", "models/summaries/", "Summaries directory.")
 
 class Model():
     def __init__(self,model_path,in_size,batch_size,n_epochs,learning_rate):
@@ -44,7 +45,7 @@ class Model():
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
-        for layer_no in range(1,self.n_layers):
+        for layer_no in range(1,self.n_layers+1):
             if layer_no == 1:
                 in_tensor = self.X_reshape 
                 n_filters = self.n_filters
@@ -74,10 +75,10 @@ class Model():
         print("Shape at lowest point = {0}".format(shape))
         flat = tf.reshape(out_tensor, [-1, shape[1]*shape[2]*shape[3]])
 
-        dense = tf.layers.dense(inputs=flat, units=512, activation=tf.nn.relu)
+        dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
         dense = tf.layers.batch_normalization(dense,training=in_training)
         #flat = tf.layers.dropout(flat, rate=0.25, training=train)
-        dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
+        #dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
@@ -100,9 +101,9 @@ class Model():
         "acc":accuracy
         }
 
+
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate)
-        #self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         extra_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(extra_ops): #for BN
             self.train_op = self.optimizer.minimize(
@@ -113,11 +114,19 @@ class Model():
         total_params = np.sum([np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])
         print("Number of trainable parameters = {0}.".format(total_params))
 
+        tf.summary.scalar('acc', self.metrics['acc'])
+        tf.summary.scalar('loss',self.loss)
+        self.merged = tf.summary.merge_all()
+
 
     def session(self,train):
         tf.reset_default_graph()
-        with tf.Session() as sess:
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             self.graph(in_training=train)
+            train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/train',
+                                      sess.graph)
+            test_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/test')
             coord = tf.train.Coordinator()
             if FLAGS.load == True or train==False: 
                 self.saver.restore(sess,self.model_path)
@@ -130,20 +139,24 @@ class Model():
                 losses = []
                 while True:
                     if train == True:
-                        _,loss,path,cm,acc = sess.run([
+                        _,summary,loss,path,cm,acc = sess.run([
                         self.train_op,
+                        self.merged,
                         self.loss,
                         self.path,
                         self.metrics['cm'],
                         self.metrics['acc']
                         ])
+                        train_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
                     else:
-                        loss,path,cm,acc = sess.run([
+                        summary,loss,path,cm,acc = sess.run([
+                        self.merged,
                         self.loss,
                         self.path,
                         self.metrics['cm'],
                         self.metrics['acc']
                         ])
+                        test_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
                     count += len(path)
                     losses.append(loss)
 
