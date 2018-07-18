@@ -7,11 +7,12 @@ from sklearn.cross_validation import StratifiedShuffleSplit as SSS
 os.environ["CUDA_VISIBLE_DEVICES"]="1" 
 
 class Data_loader():
-    def __init__(self,in_size,batch_size,n_epochs,clean_df=False,shuffle=True):
+    def __init__(self,in_training,in_size,batch_size,n_epochs,aug_flip,clean_df=False):
+        self.in_training = in_training
         self.in_size = in_size
         self.n_epochs = n_epochs
         self.batch_size = batch_size
-        self.shuffle = shuffle
+        self.aug_flip = aug_flip
 
         raw_csv_path = "train.csv"
         df = pd.read_csv(raw_csv_path) 
@@ -39,10 +40,7 @@ class Data_loader():
         self.val_size = num_lines(self.val_df_clean_path)
 
     def reader(self,csv_path):
-        if csv_path == self.train_df_clean_path:
-            n_epochs = self.n_epochs
-        else:
-            n_epochs = 1
+        n_epochs = self.n_epochs if self.in_training == True else 1
         csv = tf.train.string_input_producer([csv_path],num_epochs=n_epochs)
         reader = tf.TextLineReader(skip_header_lines=1)
         k, v = reader.read(csv)
@@ -65,18 +63,21 @@ class Data_loader():
         decoded_img = tf.image.decode_jpeg(image_bytes,channels=1)
         decoded_img = tf.cast(decoded_img,tf.float32)
         decoded_img = tf.multiply(decoded_img,1/255.0)
+        if self.in_training == True:
+            decoded_img = tf.image.random_flip_left_right(decoded_img)
+            decoded_img = tf.image.random_flip_up_down(decoded_img)
+            print("\n !!!Doing image flips!!!\n")
         decoded_img = tf.squeeze(tf.image.resize_images(decoded_img,self.in_size))
         return decoded_img
 
-    def get_data(self,train):
-        if train == True:
+    def get_data(self):
+        if self.in_training == True:
             return self.reader(self.train_df_clean_path)
         else:
             return self.reader(self.val_df_clean_path)
 
 if __name__ == "__main__":
-    loader = Data_loader(in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
-    data = loader.get_data(train=True)
+
     def session(data):
         with tf.Session() as sess:
             tf.local_variables_initializer().run()
@@ -88,10 +89,14 @@ if __name__ == "__main__":
                     data_ = sess.run([data])[0]
                     count += data_[0].shape[0]
             except tf.errors.OutOfRangeError:
-                print("Finished! Seen {0} examples.".format(count))
+                print("\n Finished! Seen {0} examples.\n".format(count))
         sess.close()
-    session(data=loader.get_data(train=True))
-    session(data=loader.get_data(train=False))
+
+    train_loader = Data_loader(in_training=True,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
+    session(data=train_loader.get_data())
+
+    test_loader = Data_loader(in_training= False,in_size=[68,106],batch_size=5,n_epochs=5,clean_df=True)
+    session(data=test_loader.get_data())
     pdb.set_trace()
 
 

@@ -10,6 +10,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", 0.0001, "Initial learning rate.")
+flags.DEFINE_boolean("aug_flip", True, "Augmentation with random flips")
 flags.DEFINE_integer("batch_size", 10, "Batch size.")
 flags.DEFINE_integer("n_epochs", 100, "Number of training epochs.")
 flags.DEFINE_integer("in_h", 108, "Image rows = height.")
@@ -20,12 +21,13 @@ flags.DEFINE_string("model_path", "model.ckpt", "Save dir.")
 flags.DEFINE_string("summaries_dir", "models/summaries/", "Summaries directory.")
 
 class Model():
-    def __init__(self,model_path,in_size,batch_size,n_epochs,learning_rate):
+    def __init__(self,model_path,in_size,batch_size,n_epochs,learning_rate,aug_flip):
         self.model_path = os.path.abspath(os.path.join("models/",model_path))
         self.in_size = in_size
         self.in_h = in_size[0]
         self.in_w = in_size[1]
 
+        self.aug_flip = aug_flip 
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.n_epochs = n_epochs
@@ -40,8 +42,8 @@ class Model():
         shape_name = lambda tensor: print("Tensor {0} has shape = {1}.\n".format(tensor.name,tensor.get_shape().as_list()))
 
         with tf.name_scope('input'):
-            self.loader = load_data.Data_loader(in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs)
-            data = self.loader.get_data(train=in_training)
+            self.loader = load_data.Data_loader(in_training=in_training,in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs,aug_flip=self.aug_flip)
+            data = self.loader.get_data()
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
@@ -162,11 +164,12 @@ class Model():
 
                     if count % 500 == 0 and train == True:
                         running_mean = np.array(losses).mean()
-                        print("Seen {0}/{1} examples. Losses = {2:.4f}. Acc = {3:.4f}.".format(
+                        print("Seen {0}/{1} examples. Losses = {2:.4f}. Acc = {3:.4f}. in_training = {4}.".format(
                         count,
                         self.loader.train_size*self.n_epochs,
                         running_mean,
-                        acc
+                        acc,
+                        self.loader.in_training
                         ))
                         losses = []
                         self.saver.save(sess,self.model_path)
@@ -188,7 +191,8 @@ if __name__ == "__main__":
             in_size=in_size,
             batch_size=FLAGS.batch_size,
             n_epochs=FLAGS.n_epochs,
-            learning_rate=FLAGS.lr)
+            learning_rate=FLAGS.lr,
+            aug_flip=FLAGS.aug_flip)
     model.session(train=True)
     model.session(train=False)
 
