@@ -24,50 +24,58 @@ class Model():
         self.in_size = in_size
         self.in_h = in_size[0]
         self.in_w = in_size[1]
-        self.filter_size = 3
+
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.n_epochs = n_epochs
 
-    def graph(self,train=True):
-        in_training = train 
-        bn = tf.layers.batch_normalization
+        self.filter_size = 3
+        self.n_filters = 32
+        self.n_filters_inc = 16
+        self.n_layers = 5
+        self.pool_size = 3
+
+    def graph(self,in_training=True):
+        shape_name = lambda tensor: print("Tensor {0} has shape = {1}.\n".format(tensor.name,tensor.get_shape().as_list()))
+
         with tf.name_scope('input'):
             self.loader = load_data.Data_loader(in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs)
             data = self.loader.get_data(train=in_training)
             self.path,self.X,self.Y = data 
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
-        conv1 = tf.layers.conv2d( inputs=self.X_reshape, filters=32, 
-            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv1 = bn(conv1,training=in_training)
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
+        for layer_no in range(1,self.n_layers):
+            if layer_no == 1:
+                in_tensor = self.X_reshape 
+                n_filters = self.n_filters
+            else: 
+                in_tensor = out_tensor
+                n_filters += self.n_filters_inc
 
-        conv2 = tf.layers.conv2d( inputs=pool1, filters=48,
-            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv2 = bn(conv2,training=in_training)
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
+            conv = tf.layers.conv2d( inputs=in_tensor, 
+                filters=n_filters, 
+                kernel_size=[self.filter_size, self.filter_size], 
+                padding="same", 
+                activation=tf.nn.relu, 
+                name = "conv_{0}".format(layer_no))
 
-        conv3 = tf.layers.conv2d( inputs=pool2, filters=64, 
-            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv3 = bn(conv3,training=in_training)
-        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2)
+            conv_bn = tf.layers.batch_normalization(conv,training=in_training,
+                name="bn_{0}".format(layer_no))
 
-        conv4 = tf.layers.conv2d( inputs=pool3, filters=80, 
-            kernel_size=[self.filter_size, self.filter_size], padding="same", activation=tf.nn.relu)
-        conv4 = bn(conv4,training=in_training)
-        pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2)
+            pool = tf.layers.max_pooling2d(inputs=conv_bn, 
+                pool_size=[self.pool_size, self.pool_size], 
+                strides=2,
+                name="pool_{0}".format(layer_no)
+                )
+            [shape_name(tensor) for tensor in [conv,conv_bn,pool]]
+            out_tensor = pool
 
-        conv5 = tf.layers.conv2d( inputs=pool4, filters=96, 
-            kernel_size=[self.filter_size, self.filter_size],strides=[2,2], padding="same", activation=tf.nn.relu)
-        conv5 = bn(conv5,training=in_training)
-
-        shape = conv5.get_shape().as_list()
+        shape = out_tensor.get_shape().as_list()
         print("Shape at lowest point = {0}".format(shape))
-        flat = tf.reshape(conv5, [-1, shape[1]*shape[2]*shape[3]])
+        flat = tf.reshape(out_tensor, [-1, shape[1]*shape[2]*shape[3]])
 
         dense = tf.layers.dense(inputs=flat, units=512, activation=tf.nn.relu)
-        dense = bn(dense,training=in_training)
+        dense = tf.layers.batch_normalization(dense,training=in_training)
         #flat = tf.layers.dropout(flat, rate=0.25, training=train)
         dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
@@ -82,10 +90,14 @@ class Model():
                 initializer = tf.zeros_initializer())
             self.cm = tf.assign_add(cm_init, cm_diff)
 
+        correct_prediction = tf.equal(tf.cast(self.Y,tf.int64),predictions)
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
+
         self.metrics = {
         "predictions": predictions,
         "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor"),
-        "cm": self.cm
+        "cm": self.cm,
+        "acc":accuracy
         }
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -105,7 +117,7 @@ class Model():
     def session(self,train):
         tf.reset_default_graph()
         with tf.Session() as sess:
-            self.graph(train=train)
+            self.graph(in_training=train)
             coord = tf.train.Coordinator()
             if FLAGS.load == True or train==False: 
                 self.saver.restore(sess,self.model_path)
@@ -118,21 +130,30 @@ class Model():
                 losses = []
                 while True:
                     if train == True:
-                        _,loss,path,cm = sess.run([self.train_op,
-                        self.loss,self.path,
-                        self.metrics['cm']
+                        _,loss,path,cm,acc = sess.run([
+                        self.train_op,
+                        self.loss,
+                        self.path,
+                        self.metrics['cm'],
+                        self.metrics['acc']
                         ])
                     else:
-                        loss,path = sess.run([self.loss,self.path])
+                        loss,path,cm,acc = sess.run([
+                        self.loss,
+                        self.path,
+                        self.metrics['cm'],
+                        self.metrics['acc']
+                        ])
                     count += len(path)
                     losses.append(loss)
 
                     if count % 500 == 0 and train == True:
                         running_mean = np.array(losses).mean()
-                        print("Seen {0}/{1} examples. Losses = {2:.4f}".format(
+                        print("Seen {0}/{1} examples. Losses = {2:.4f}. Acc = {3:.4f}.".format(
                         count,
                         self.loader.train_size*self.n_epochs,
-                        running_mean
+                        running_mean,
+                        acc
                         ))
                         losses = []
                         self.saver.save(sess,self.model_path)
@@ -141,7 +162,7 @@ class Model():
 
             if train == False:
                 val_loss = np.array(losses).mean()
-                print("Test loss = {0:.4f}.".format(val_loss))
+                print("Test loss = {0:.4f}. Acc = {1:.4f}.".format(val_loss,acc))
                 pdb.set_trace()
 
         sess.close()
