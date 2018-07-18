@@ -12,7 +12,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_float("lr", 0.0001, "Initial learning rate.")
 flags.DEFINE_boolean("aug_flip", True, "Augmentation with random flips")
 flags.DEFINE_integer("batch_size", 10, "Batch size.")
-flags.DEFINE_integer("n_epochs", 100, "Number of training epochs.")
+flags.DEFINE_integer("n_epochs", 300, "Number of training epochs.")
 flags.DEFINE_integer("in_h", 108, "Image rows = height.")
 flags.DEFINE_integer("in_w", 170, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
@@ -33,7 +33,7 @@ class Model():
         self.n_epochs = n_epochs
 
         self.filter_size = 3
-        self.n_filters = 32
+        self.n_filters = 32 
         self.n_filters_inc = 16
         self.n_layers = 5
         self.pool_size = 3
@@ -194,6 +194,7 @@ if __name__ == "__main__":
             aug_flip=FLAGS.aug_flip)
     if FLAGS.train == True:
         model.session(train=True)
+        model.session(train=False)
     else:
         model.session(train=False)
 
