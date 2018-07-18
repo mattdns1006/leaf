@@ -77,10 +77,10 @@ class Model():
         print("Shape at lowest point = {0}".format(shape))
         flat = tf.reshape(out_tensor, [-1, shape[1]*shape[2]*shape[3]])
 
+        #flat = tf.layers.dropout(flat, rate=0.05, training=in_training)
         dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
         dense = tf.layers.batch_normalization(dense,training=in_training)
-        #flat = tf.layers.dropout(flat, rate=0.25, training=train)
-        #dense = tf.layers.dense(inputs=dense, units=256, activation=tf.nn.relu)
+
         self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
@@ -102,7 +102,6 @@ class Model():
         "cm": self.cm,
         "acc":accuracy
         }
-
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate)
@@ -179,7 +178,6 @@ class Model():
             if train == False:
                 val_loss = np.array(losses).mean()
                 print("Test loss = {0:.4f}. Acc = {1:.4f}.".format(val_loss,acc))
-                pdb.set_trace()
 
         sess.close()
 

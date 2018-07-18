@@ -63,10 +63,14 @@ class Data_loader():
         decoded_img = tf.image.decode_jpeg(image_bytes,channels=1)
         decoded_img = tf.cast(decoded_img,tf.float32)
         decoded_img = tf.multiply(decoded_img,1/255.0)
-        if self.in_training == True:
+        if self.in_training == True and self.aug_flip == True:
+            print("\n !!!Doing image flips!!!\n")
             decoded_img = tf.image.random_flip_left_right(decoded_img)
             decoded_img = tf.image.random_flip_up_down(decoded_img)
-            print("\n !!!Doing image flips!!!\n")
+            print("\n !!!Doing rotations !!!\n")
+            angle = tf.random_normal(mean=0,stddev=0.19,shape=[1])
+            decoded_img = tf.contrib.image.rotate(decoded_img,angles=angle)
+
         decoded_img = tf.squeeze(tf.image.resize_images(decoded_img,self.in_size))
         return decoded_img
 
