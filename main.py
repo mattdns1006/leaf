@@ -17,6 +17,7 @@ flags.DEFINE_integer("in_h", 108, "Image rows = height.")
 flags.DEFINE_integer("in_w", 170, "Image cols = width.")
 flags.DEFINE_boolean("load", True, "Load previous checkpoint?")
 flags.DEFINE_boolean("train", True, "Training model.")
+flags.DEFINE_boolean("submission", True, "Training model.")
 flags.DEFINE_string("model_path", "model.ckpt", "Save dir.")
 flags.DEFINE_string("summaries_dir", "models/summaries/", "Summaries directory.")
 
@@ -38,13 +39,16 @@ class Model():
         self.n_layers = 5
         self.pool_size = 3
 
-    def graph(self,in_training=True):
+    def graph(self,in_training=True,submission=False):
         shape_name = lambda tensor: print("Tensor {0} has shape = {1}.\n".format(tensor.name,tensor.get_shape().as_list()))
 
         with tf.name_scope('input'):
-            self.loader = load_data.Data_loader(in_training=in_training,in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs,aug_flip=self.aug_flip)
+            self.loader = load_data.Data_loader(in_training=in_training,in_size=self.in_size,batch_size=self.batch_size,n_epochs=self.n_epochs,aug_flip=self.aug_flip,submission=submission)
             data = self.loader.get_data()
+            self.n_classes = self.loader.le.classes_.size
             self.path,self.X,self.Y = data 
+            if self.Y is None:
+                self.Y = tf.placeholder(tf.int32,[None,])
             self.X_reshape = tf.reshape(self.X,shape=[-1,self.in_h,self.in_w,1])
 
         for layer_no in range(1,self.n_layers+1):
@@ -81,7 +85,8 @@ class Model():
         dense = tf.layers.dense(inputs=flat, units=256, activation=tf.nn.relu)
         dense = tf.layers.batch_normalization(dense,training=in_training)
 
-        self.logits = tf.layers.dense(inputs=dense, units=99, activation=tf.nn.relu)
+        self.logits = tf.layers.dense(inputs=dense, units=self.n_classes, activation=tf.nn.relu)
+        self.softmax = tf.nn.softmax(self.logits, name="softmax_tensor")
 
         self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.Y, logits=self.logits)
         predictions = tf.argmax(input=self.logits, axis=1)
@@ -98,7 +103,7 @@ class Model():
 
         self.metrics = {
         "predictions": predictions,
-        "probabilities": tf.nn.softmax(self.logits, name="softmax_tensor"),
+        "probabilities": self.softmax,
         "cm": self.cm,
         "acc":accuracy
         }
@@ -120,11 +125,11 @@ class Model():
         self.merged = tf.summary.merge_all()
 
 
-    def session(self,train):
+    def session(self,train,submission=False):
         tf.reset_default_graph()
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            self.graph(in_training=train)
+            self.graph(in_training=train,submission=submission)
             train_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/train',
                                       sess.graph)
             test_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/test')
@@ -138,45 +143,63 @@ class Model():
             try:
                 count = 0 
                 losses = []
-                while True:
-                    if train == True:
-                        _,summary,loss,path,cm,acc = sess.run([
-                        self.train_op,
-                        self.merged,
-                        self.loss,
-                        self.path,
-                        self.metrics['cm'],
-                        self.metrics['acc']
-                        ])
-                        train_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
-                    else:
-                        summary,loss,path,cm,acc = sess.run([
-                        self.merged,
-                        self.loss,
-                        self.path,
-                        self.metrics['cm'],
-                        self.metrics['acc']
-                        ])
-                        test_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
+                if not submission:
+                    while True:
+                        if train == True:
+                            _,summary,loss,path,cm,acc = sess.run([
+                            self.train_op,
+                            self.merged,
+                            self.loss,
+                            self.path,
+                            self.metrics['cm'],
+                            self.metrics['acc']
+                            ])
+                            train_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
+                        else:
+                            summary,loss,path,cm,acc = sess.run([
+                            self.merged,
+                            self.loss,
+                            self.path,
+                            self.metrics['cm'],
+                            self.metrics['acc']
+                            ])
+                            test_writer.add_summary(summary,tf.train.global_step(sess,self.global_step))
 
-                    count += len(path)
-                    losses.append(loss)
+                        count += len(path)
+                        losses.append(loss)
 
-                    if count % 500 == 0 and train == True:
-                        running_mean = np.array(losses).mean()
-                        print("Seen {0}/{1} examples. Losses = {2:.4f}. Acc = {3:.4f}. in_training = {4}.".format(
-                        count,
-                        self.loader.train_size*self.n_epochs,
-                        running_mean,
-                        acc,
-                        self.loader.in_training
-                        ))
-                        losses = []
-                        self.saver.save(sess,self.model_path)
+                        if count % 500 == 0 and train == True:
+                            running_mean = np.array(losses).mean()
+                            print("Seen {0}/{1} examples. Losses = {2:.4f}. Acc = {3:.4f}. in_training = {4}.".format(
+                            count,
+                            self.loader.train_size*self.n_epochs,
+                            running_mean,
+                            acc,
+                            self.loader.in_training
+                            ))
+                            losses = []
+                            self.saver.save(sess,self.model_path)
+                else: 
+                    predictions = []
+                    paths = []
+                    while True:
+                        path, prediction = sess.run([self.path,self.softmax])
+                        paths.append(path[0])
+                        predictions.append(prediction)
+
             except tf.errors.OutOfRangeError:
                 print("Finished!")
 
-            if train == False:
+            if submission == True:
+                predictions = np.array(predictions).squeeze()
+                col_names = self.loader.le.inverse_transform(np.arange(0,self.n_classes))
+                predictions = pd.DataFrame(predictions,columns=col_names)
+                predictions['id'] = paths
+                predictions['id'] = predictions['id'].astype(str) 
+                predictions['id'] = predictions['id'].str.extract('(\d+)')
+                predictions.to_csv("submission.csv",index=0,header=True)
+
+            if train == False and submission == False:
                 val_loss = np.array(losses).mean()
                 print("Test loss = {0:.4f}.".format(val_loss))
 
@@ -192,7 +215,9 @@ if __name__ == "__main__":
             n_epochs=FLAGS.n_epochs,
             learning_rate=FLAGS.lr,
             aug_flip=FLAGS.aug_flip)
-    if FLAGS.train == True:
+    if FLAGS.submission == True:
+        model.session(train=False,submission=True)
+    elif FLAGS.train == True:
         model.session(train=True)
         model.session(train=False)
     else:

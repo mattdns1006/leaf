@@ -15,9 +15,6 @@ class Data_loader():
         self.aug_flip = aug_flip
         self.submission = submission
 
-        raw_csv_path = "train.csv"
-        df = pd.read_csv(raw_csv_path) 
-
         self.id_by_species = lambda species_name: train_df.loc[train_df['species']== species_name].id.values
         id_to_path = lambda id_no: "images/{0}_preprocessed.jpg".format(id_no)
         self.img_from_id = lambda id_no: imread(id_to_path(id_no))
@@ -25,10 +22,15 @@ class Data_loader():
         self.train_df_clean_path = "train_paths.csv"
         self.val_df_clean_path = "val_paths.csv"
         self.test_df_clean_path = "test_paths.csv"
+
+        raw_csv_path = "train.csv"
+        df = pd.read_csv(raw_csv_path) 
+        df['img_path'] = df.id.apply(id_to_path)
+        self.le = preprocessing.LabelEncoder()
+        df['species_no'] = self.le.fit_transform(df['species'])
+
         if not os.path.exists(self.train_df_clean_path) or clean_df == True:
-            df['img_path'] = df.id.apply(id_to_path)
-            self.le = preprocessing.LabelEncoder()
-            df['species_no'] = self.le.fit_transform(df['species'])
+
             df = df[['img_path','species','species_no']]
             # split into train and validation set
             sss = SSS(y=df.species_no,n_iter = 1,test_size=0.2,random_state=1006)
@@ -99,13 +101,13 @@ class Data_loader():
         path = tf.decode_csv(v,record_defaults = defaults)[0]
         img = self.getImg(path)
         min_after_dequeue = 10
-        capacity = min_after_dequeue + 3*self.batch_size
+        capacity = min_after_dequeue + 3*1
         path_batch,img_patch = tf.train.shuffle_batch([path,img], 
-                batch_size=self.batch_size,
+                batch_size=1,
                 capacity=capacity, 
                 min_after_dequeue=min_after_dequeue,
                 allow_smaller_final_batch=True)
-        return [path_batch,img_patch]
+        return [path_batch,img_patch,None]
 
     def get_data(self):
         if self.submission == True:
